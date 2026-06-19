@@ -4,6 +4,7 @@
 #   tunnelctl sync              Generate/refresh a launchd plist per tunnel in tunnels.json;
 #                               load new tunnels, unload ones removed from config.
 #   tunnelctl add               Interactive: append a tunnel to tunnels.json, then sync.
+#   tunnelctl add-bastion       Interactive: define a bastion (alias/instance/zone/project).
 #   tunnelctl status            Real-health table for all tunnels + watchdog state.
 #   tunnelctl restart <name|all>
 #   tunnelctl logs <name>       Tail that tunnel's logs.
@@ -207,19 +208,46 @@ PYEOF
   echo "done."
 }
 
+cmd_add_bastion() {
+  echo "Define a bastion (each bastion belongs to one GCP project)."
+  read -r -p "  alias (e.g. prod): " alias
+  read -r -p "  instance (gcloud VM name): " instance
+  read -r -p "  zone (e.g. us-central1-a): " zone
+  read -r -p "  project (GCP project id): " project
+
+  "$PY" - "$CONF" "$alias" "$instance" "$zone" "$project" <<'PYEOF'
+import json, sys
+conf, alias, instance, zone, project = sys.argv[1:6]
+data = json.load(open(conf))
+data.setdefault("bastions", {})
+if alias in data["bastions"]:
+    sys.exit(f"error: bastion alias '{alias}' already exists")
+if not (alias and instance and zone):
+    sys.exit("error: alias, instance and zone are required")
+spec = {"instance": instance, "zone": zone}
+if project:
+    spec["project"] = project
+data["bastions"][alias] = spec
+json.dump(data, open(conf, "w"), indent=2); open(conf, "a").write("\n")
+print(f"added bastion '{alias}' (project: {project or 'defaults.project'})")
+PYEOF
+  [ $? -eq 0 ] && echo "Reference it from a tunnel's \"bastion\" field, then: tunnelctl sync"
+}
+
 cmd_edit() { "${EDITOR:-vi}" "$CONF"; echo "Run 'tunnelctl sync' to apply."; }
 
-usage() { sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; }
 
 case "${1:-}" in
-  sync)     cmd_sync ;;
-  add)      cmd_add ;;
-  status|"") cmd_status ;;
-  restart)  cmd_restart "${2:-}" ;;
-  logs)     cmd_logs "${2:-}" ;;
-  remove)   cmd_remove "${2:-}" ;;
-  validate) cmd_validate ;;
-  edit)     cmd_edit ;;
+  sync)         cmd_sync ;;
+  add)          cmd_add ;;
+  add-bastion)  cmd_add_bastion ;;
+  status|"")    cmd_status ;;
+  restart)      cmd_restart "${2:-}" ;;
+  logs)         cmd_logs "${2:-}" ;;
+  remove)       cmd_remove "${2:-}" ;;
+  validate)     cmd_validate ;;
+  edit)         cmd_edit ;;
   -h|--help|help) usage ;;
   *) echo "unknown command: $1"; usage; exit 1 ;;
 esac

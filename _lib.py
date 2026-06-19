@@ -22,20 +22,19 @@ def load():
     bastions = data.get("bastions", {})
     tunnels = data.get("tunnels", [])
     for t in tunnels:
-        t.setdefault("project", defaults.get("project"))
         t.setdefault("ssh_opts", defaults.get("ssh_opts", []))
         t.setdefault("description", t.get("name", ""))
-        # Resolve bastion alias -> instance + zone (+ optional project).
+        # Resolve bastion alias -> instance + zone (+ project).
         # Falls back to treating 'bastion' as a raw instance name (needs 'zone').
         b = t.get("bastion")
+        spec = bastions.get(b, {})
         if b in bastions:
-            spec = bastions[b]
             t["_instance"] = spec.get("instance")
             t["zone"] = spec.get("zone")
-            if spec.get("project"):
-                t["project"] = spec["project"]
         else:
             t["_instance"] = b  # raw instance name (legacy)
+        # Project precedence: explicit tunnel project > bastion project > default.
+        t["project"] = t.get("project") or spec.get("project") or defaults.get("project")
     return tunnels
 
 
@@ -69,6 +68,9 @@ def validate():
         if not t.get("zone"):
             errors.append(f"[{ctx}] no zone (bastion alias '{t.get('bastion')}' "
                           f"missing zone, or raw instance needs a 'zone' field)")
+        if not t.get("project"):
+            errors.append(f"[{ctx}] no project (set it on bastion '{t.get('bastion')}', "
+                          f"on the tunnel, or as defaults.project)")
         n = t.get("name")
         if n in seen_names:
             errors.append(f"duplicate name '{n}'")

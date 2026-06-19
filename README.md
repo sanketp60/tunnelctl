@@ -217,8 +217,8 @@ rm -f ~/Library/LaunchAgents/com.fynd.tunnel.*.plist
     "ssh_opts": ["-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3", "-o", "ExitOnForwardFailure=yes"]
   },
   "bastions": {
-    "dev":  { "instance": "my-dev-bastion",  "zone": "us-central1-a" },
-    "prod": { "instance": "my-prod-bastion", "zone": "us-central1-b" }
+    "dev":  { "instance": "my-dev-bastion",  "zone": "us-central1-a", "project": "my-dev-project" },
+    "prod": { "instance": "my-prod-bastion", "zone": "us-central1-b", "project": "my-prod-project" }
   },
   "tunnels": [
     {
@@ -236,14 +236,20 @@ rm -f ~/Library/LaunchAgents/com.fynd.tunnel.*.plist
 
 ### Bastions (aliases)
 
-Define each bastion **once** and reference it by alias. Zone (and optionally project) come from
-the alias, so you can never accidentally pair a bastion with the wrong zone.
+Define each bastion **once** and reference it by alias. The instance, zone, **and GCP project**
+come from the alias — so each bastion can live in a different project, and you can never
+accidentally pair a bastion with the wrong zone or project.
 
 | Field | Required | Description |
 |-------|----------|-------------|
 | `instance` | yes | gcloud compute instance name of the bastion |
 | `zone` | yes | the bastion's zone (e.g. `us-central1-a`) |
-| `project` | no | overrides `defaults.project` for tunnels using this bastion |
+| `project` | recommended | GCP project this bastion lives in. Falls back to `defaults.project` if omitted |
+
+Add one interactively with `tunnelctl add-bastion`, or edit the `bastions` block directly.
+
+**Project precedence** (highest first): a `project` set on the tunnel → the bastion's
+`project` → `defaults.project`.
 
 ### Tunnel fields
 
@@ -254,13 +260,14 @@ the alias, so you can never accidentally pair a bastion with the wrong zone.
 | `remote_host` | yes | target DB IP/host **as seen from the bastion** |
 | `remote_port` | yes | target DB port (e.g. `5432` Postgres, `27017` Mongo) |
 | `type` | yes | health-probe type: `pg` \| `mongo` \| `tcp` |
-| `bastion` | yes | a bastion **alias** from the `bastions` block |
+| `bastion` | yes | a bastion **alias** from the `bastions` block (provides instance/zone/project) |
+| `project` | no | overrides the bastion's project for this tunnel (rarely needed) |
 | `description` | no | shown in `tunnelctl status` |
 | `ssh_opts` | no | overrides `defaults.ssh_opts` for this tunnel |
 
 ### `defaults`
 
-- `project` — default GCP project for all tunnels (overridable per bastion).
+- `project` — fallback GCP project for bastions that don't set their own.
 - `ssh_opts` — SSH options applied to every tunnel. The keepalive defaults are recommended;
   they make sleep/wake recovery faster.
 
@@ -273,7 +280,8 @@ After any edit, run **`tunnelctl sync`**.
 ```bash
 tunnelctl status            # health table for all tunnels + watchdog state (default command)
 tunnelctl sync              # apply tunnels.json: create/refresh/load/unload agents to match config
-tunnelctl add               # interactive: prompt for fields, append to JSON, then sync
+tunnelctl add               # interactive: prompt for tunnel fields, append to JSON, then sync
+tunnelctl add-bastion       # interactive: define a bastion (alias/instance/zone/project)
 tunnelctl restart <name>    # restart one tunnel
 tunnelctl restart all       # restart every tunnel
 tunnelctl logs <name>       # tail -f a tunnel's stdout+stderr logs

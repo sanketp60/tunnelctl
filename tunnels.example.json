@@ -4,7 +4,9 @@
     "tunnels.json is gitignored (it holds your private infra). This example is safe to commit.",
     "",
     "BASTIONS: define each bastion once under \"bastions\" as an alias ->",
-    "  { \"instance\": <gcloud instance name>, \"zone\": <zone>, \"project\": <optional override> }",
+    "  { \"instance\": <gcloud instance name>, \"zone\": <zone>, \"project\": <gcp project id> }",
+    "Each bastion can live in a DIFFERENT GCP project (set \"project\" per bastion).",
+    "If a bastion omits \"project\", it falls back to defaults.project.",
     "Tunnels then reference the alias by name in their \"bastion\" field.",
     "",
     "FIELDS (per tunnel):",
@@ -20,12 +22,12 @@
     "NOTE: infra only. Do NOT put DB passwords here; keep them in your DB client."
   ],
   "defaults": {
-    "project": "my-gcp-project-id",
+    "project": "my-default-project",
     "ssh_opts": ["-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3", "-o", "ExitOnForwardFailure=yes"]
   },
   "bastions": {
-    "dev": { "instance": "my-dev-bastion", "zone": "us-central1-a" },
-    "prod": { "instance": "my-prod-bastion", "zone": "us-central1-b" }
+    "dev": { "instance": "my-dev-bastion", "zone": "us-central1-a", "project": "my-dev-project" },
+    "prod": { "instance": "my-prod-bastion", "zone": "us-central1-b", "project": "my-prod-project" }
   },
   "tunnels": [
     {
