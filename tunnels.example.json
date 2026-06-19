@@ -1,0 +1,50 @@
+{
+  "_README": [
+    "Copy this file to tunnels.json and fill in your real values, then run: tunnelctl sync",
+    "tunnels.json is gitignored (it holds your private infra). This example is safe to commit.",
+    "",
+    "BASTIONS: define each bastion once under \"bastions\" as an alias ->",
+    "  { \"instance\": <gcloud instance name>, \"zone\": <zone>, \"project\": <optional override> }",
+    "Tunnels then reference the alias by name in their \"bastion\" field.",
+    "",
+    "FIELDS (per tunnel):",
+    "  name         (required) unique id; becomes launchd label <prefix>.<name> and log file names",
+    "  local_port   (required) port on 127.0.0.1 your DB client connects to (must be unique)",
+    "  remote_host  (required) target DB IP/host as seen from the bastion",
+    "  remote_port  (required) target DB port (e.g. 5432 postgres, 27017 mongo)",
+    "  type         (required) health-probe type: 'pg' | 'mongo' | 'tcp'",
+    "  bastion      (required) bastion ALIAS defined under \"bastions\" (zone/project come from it)",
+    "  description  (optional) shown in 'tunnelctl status'",
+    "  ssh_opts     (optional) overrides defaults.ssh_opts (array of ssh args)",
+    "",
+    "NOTE: infra only. Do NOT put DB passwords here; keep them in your DB client."
+  ],
+  "defaults": {
+    "project": "my-gcp-project-id",
+    "ssh_opts": ["-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3", "-o", "ExitOnForwardFailure=yes"]
+  },
+  "bastions": {
+    "dev": { "instance": "my-dev-bastion", "zone": "us-central1-a" },
+    "prod": { "instance": "my-prod-bastion", "zone": "us-central1-b" }
+  },
+  "tunnels": [
+    {
+      "name": "example-pg",
+      "local_port": 15000,
+      "remote_host": "10.0.0.10",
+      "remote_port": 5432,
+      "type": "pg",
+      "bastion": "dev",
+      "description": "Example Postgres tunnel"
+    },
+    {
+      "name": "example-mongo",
+      "local_port": 27027,
+      "remote_host": "10.0.0.20",
+      "remote_port": 27017,
+      "type": "mongo",
+      "bastion": "prod",
+      "description": "Example Mongo tunnel"
+    }
+  ]
+}

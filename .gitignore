@@ -1,0 +1,24 @@
+# Private infra config (real bastions, IPs, project) — NEVER commit.
+tunnels.json
+
+# Runtime logs (may contain hostnames, IPs, auth prompts, MOTD banners).
+logs/
+*.log
+
+# Local watchdog state.
+/tmp/fynd-tunnel-*
+
+# Generated launchd plists (if ever copied here).
+*.plist
+
+# OS / editor cruft.
+.DS_Store
+.tool-versions
+*.swp
+*~
+.idea/
+.vscode/
+
+# Python cache.
+__pycache__/
+*.pyc
