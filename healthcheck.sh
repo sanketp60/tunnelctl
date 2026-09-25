@@ -35,11 +35,12 @@ run_with_timeout() {
   return $rc
 }
 
-probe() { # port type
+probe() { # port type [bind_address]
+  local bind="${3:-127.0.0.1}"
   case "$2" in
-    pg)    pg_isready -h 127.0.0.1 -p "$1" -t "$PROBE_TIMEOUT" -q; local r=$?; [ "$r" -eq 0 ] || [ "$r" -eq 1 ] ;;
+    pg)    pg_isready -h "$bind" -p "$1" -t "$PROBE_TIMEOUT" -q; local r=$?; [ "$r" -eq 0 ] || [ "$r" -eq 1 ] ;;
     mongo) "$PY" "$MONGO_PING" "$1" "$PROBE_TIMEOUT" >/dev/null 2>&1 ;;
-    tcp)   nc -z -G "$PROBE_TIMEOUT" 127.0.0.1 "$1" >/dev/null 2>&1 ;;
+    tcp)   nc -z -G "$PROBE_TIMEOUT" "$bind" "$1" >/dev/null 2>&1 ;;
   esac
 }
 
@@ -51,12 +52,13 @@ mark_restart() { date +%s > "/tmp/fynd-tunnel-${1}.last"; }
 
 main() {
   local healed=0 failed=0 ok=0
-  while IFS='|' read -r name port host rport type desc; do
+  while IFS='|' read -r name port host rport type desc bind; do
     [ -z "$name" ] && continue
+    bind="${bind:-127.0.0.1}"
     local label="$PREFIX.$name"
-    if probe "$port" "$type"; then ok=$((ok+1)); continue; fi
+    if probe "$port" "$type" "$bind"; then ok=$((ok+1)); continue; fi
 
-    log "UNHEALTHY: $desc ($label) on :$port"
+    log "UNHEALTHY: $desc ($label) on $bind:$port"
     if cooldown_active "$label"; then
       log "  -> in cooldown (<${COOLDOWN}s), skipping"; failed=$((failed+1)); continue
     fi
@@ -67,7 +69,7 @@ main() {
     mark_restart "$label"
     launchctl kickstart -k "gui/$UID_NUM/$label" 2>>"$LOG"
     sleep "$POST_RESTART_WAIT"
-    if probe "$port" "$type"; then log "  -> RECOVERED: $desc"; healed=$((healed+1))
+    if probe "$port" "$type" "$bind"; then log "  -> RECOVERED: $desc"; healed=$((healed+1))
     else log "  -> still down; retry next cycle (after cooldown)"; failed=$((failed+1)); fi
   done < <("$PY" "$LIB" rows)
 

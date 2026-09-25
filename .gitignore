@@ -1,6 +1,10 @@
 # Private infra config (real bastions, IPs, project) — NEVER commit.
 tunnels.json
 
+# Timestamped backups of any file (may contain the same private infra) — NEVER commit.
+*.bak
+*.bak.*
+
 # Runtime logs (may contain hostnames, IPs, auth prompts, MOTD banners).
 logs/
 *.log

@@ -3,8 +3,9 @@
 
 Usage:
   _lib.py names                  -> print tunnel names, one per line
-  _lib.py rows                   -> print 'name|local_port|remote_host|remote_port|type|description'
+  _lib.py rows                   -> print 'name|local_port|remote_host|remote_port|type|description|bind_address'
   _lib.py field <name> <field>   -> print one resolved field (with defaults applied)
+  _lib.py binds                  -> print unique non-loopback bind addresses
   _lib.py ssh-args <name>        -> print the gcloud ssh argv, NUL-separated
   _lib.py validate               -> exit 0 if config valid, else print errors and exit 1
 """
@@ -24,6 +25,12 @@ def load():
     for t in tunnels:
         t.setdefault("ssh_opts", defaults.get("ssh_opts", []))
         t.setdefault("description", t.get("name", ""))
+        # Local address the forward binds to. Empty (the default) means "let
+        # ssh decide", which binds every loopback address (127.0.0.1 AND ::1) —
+        # do NOT substitute "127.0.0.1" here or IPv6-resolving clients break.
+        # Set explicitly only when a service (e.g. Kafka) advertises an address
+        # the client must reach on that exact IP.
+        t.setdefault("bind_address", defaults.get("bind_address", ""))
         # Resolve bastion alias -> instance + zone (+ project).
         # Falls back to treating 'bastion' as a raw instance name (needs 'zone').
         b = t.get("bastion")
@@ -75,9 +82,12 @@ def validate():
         if n in seen_names:
             errors.append(f"duplicate name '{n}'")
         seen_names[n] = True
-        p = t.get("local_port")
+        # A port collides only when bound on the same local address, so several
+        # tunnels may share e.g. :9092 across distinct bind_addresses. An empty
+        # bind_address is loopback, so it must collide with an explicit one.
+        p = (t.get("bind_address") or "127.0.0.1", t.get("local_port"))
         if p in seen_ports:
-            errors.append(f"duplicate local_port {p} ('{n}' and '{seen_ports[p]}')")
+            errors.append(f"duplicate bind {p[0]}:{p[1]} ('{n}' and '{seen_ports[p]}')")
         seen_ports[p] = n
     if errors:
         print("\n".join(errors))
@@ -100,7 +110,18 @@ def main():
     if cmd == "rows":
         for t in load():
             print("|".join(str(t[k]) for k in
-                  ("name", "local_port", "remote_host", "remote_port", "type", "description")))
+                  ("name", "local_port", "remote_host", "remote_port", "type",
+                   "description", "bind_address")))
+        return 0
+    if cmd == "binds":
+        # Addresses that must exist as lo0 aliases before their tunnel can bind.
+        seen = []
+        for t in load():
+            b = t.get("bind_address")
+            if b and b not in ("127.0.0.1", "::1") and b not in seen:
+                seen.append(b)
+        for b in seen:
+            print(b)
         return 0
     if cmd == "field":
         t = find(sys.argv[2])
@@ -111,7 +132,12 @@ def main():
         args = ["compute", "ssh", "--zone", t["zone"], t["_instance"],
                 "--project", t["project"], "--tunnel-through-iap", "--"]
         args += list(t.get("ssh_opts", []))
-        args += ["-L", f'{t["local_port"]}:{t["remote_host"]}:{t["remote_port"]}', "-N"]
+        # Omit the bind prefix entirely when unset, so ssh keeps its default
+        # behaviour of binding all loopback addresses (v4 + v6).
+        fwd = f'{t["local_port"]}:{t["remote_host"]}:{t["remote_port"]}'
+        if t.get("bind_address"):
+            fwd = f'{t["bind_address"]}:{fwd}'
+        args += ["-L", fwd, "-N"]
         # Trailing NUL after EVERY arg so `read -d ''` captures the last one too.
         sys.stdout.write("".join(a + "\0" for a in args))
         return 0
